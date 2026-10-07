@@ -194,7 +194,7 @@ button:focus-visible{outline:3px solid var(--m);outline-offset:2px}
 <div class="toast" id="toast"></div>
 <script>
 /*CORE*/
-var SIZE=/^(BL(?:XXG|XGG|EXGG|EXG|GGG|GG|XG|PP|G|M|P)|A\d{1,2}|ESPECIAL|ESP|XXXG|XXG|XG|EXGG|EXG|XGG|GGGG|GGG|GG|G|M|P|PP|XXS|XS|S|L|XL|XXL|XXXL|G1|G2|G3|G4|EGG|EG|XP)$/i;
+var SIZE=/^(BL(?:XXG|XGG|EXGG|EXG|GGG|GG|XG|PP|G|M|P)|\d{1,2}A|A\d{1,2}|ESPECIAL|ESP|XXXG|XXG|XG|EXGG|EXG|XGG|GGGG|GGG|GG|G|M|P|PP|XXS|XS|S|L|XL|XXL|XXXL|G1|G2|G3|G4|EGG|EG|XP)$/i;
 var BLRE=/(^|[^\p{L}\p{N}])(?:BABY[\s\-_.]*LOOKS?|BL)(?![\p{L}\p{N}])/giu;
 function lev(a,b){var m=[],i,j;for(i=0;i<=a.length;i++)m[i]=[i];for(j=1;j<=b.length;j++)m[0][j]=j;
   for(i=1;i<=a.length;i++)for(j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
@@ -210,11 +210,12 @@ function genderOf(w){
   return '';
 }
 function stripGender(s){return s.replace(/\p{L}+\.?/gu,function(w){return genderOf(w)?' ':w})}
+function kid(z){var m=String(z).match(/^(?:A(\d{1,2})|(\d{1,2})A)$/i);return m?Number(m[1]||m[2])+'A':z}
 var WORDS={PEQUENO:'P',MEDIO:'M',GRANDE:'G'};
 var SIZE_LAB=/(^|[^\p{L}\p{N}])(?:TAMANHO|TAM|TMH|TM|SIZE)\.?\s*[:=]?\s*(?:([\p{L}\p{N}]{1,8})(?![\p{L}\p{N}])(?!\s*[:=]))?/giu;
 var NUM_LAB=/(^|[^\p{L}\p{N}])(?:(?:NUMERO|NÚMERO|NUM|NRO|NR|N)\.?\s*[:=]|N[º°]\.?|NUM(?:ERO)?\.?|NÚMERO)\s*(\d{1,4})?(?![\p{L}\p{N}])/giu;
 var NOISE=/(^|[^\p{L}\p{N}])(NOME|CAMISAS?|CAMISETAS?|CONJUNTO|CONJ|COMPLETO)(\d{1,2})?\.?(?![\p{L}\p{N}])\s*[:=]?/giu;
-var CAMGLUE=/(^|[^\p{L}\p{N}])CAMISAS?(?=(?:A\d{1,2}|XXXG|XXG|XGG|EXGG|EXG|XG|GGG|GG|G|M|P|PP)(?![\p{L}\p{N}]))/giu;
+var CAMGLUE=/(^|[^\p{L}\p{N}])CAMISAS?(?=(?:\d{1,2}A|A\d{1,2}|XXXG|XXG|XGG|EXGG|EXG|XG|GGG|GG|G|M|P|PP)(?![\p{L}\p{N}]))/giu;
 var SHORT_LAB=/(^|[^\p{L}\p{N}])(?:SHORT(?:S(?=\s))?|BERMUDAS?|CAL[ÇC][ÃA]O)\.?\s*[:=\-–]?\s*(?:(?:TAMANHO|TAM)\.?\s*[:=\-–]?\s*)?(?:([\p{L}\p{N}]{1,8})(?![\p{L}\p{N}]))?/giu;
 var EDGE=/^[\s\-–—\/,;:|.'!?]+|[\s\-–—\/,;:|'!?]+$/g;
 function clean(s){
@@ -262,8 +263,8 @@ function formatLine(raw,short,forceBL){
     return pre+' ';
   });
   // idade: "4 anos", "8anos", "6a" -> A4, A8, A6
-  line=line.replace(/(^|[^\p{L}\p{N}])(\d{1,2})\s*anos?(?![\p{L}\p{N}])/giu,'$1A$2 ');
-  line=line.replace(/(^|[^\p{L}\p{N}])(\d{1,2})a(?![\p{L}\p{N}])/giu,'$1A$2 ');
+  line=line.replace(/(^|[^\p{L}\p{N}])(\d{1,2})\s*anos?(?![\p{L}\p{N}])/giu,function(m,p,d){return p+Number(d)+'A '});
+  line=line.replace(/(^|[^\p{L}\p{N}])(\d{1,2})a(?![\p{L}\p{N}])/giu,function(m,p,d){return p+Number(d)+'A '});
   var num='',size='';
   line=line.replace(/#\s*(\d{1,4})(?!\d)/g,function(m,d){if(!num)num=d;return ' ';});
   line=line.replace(/[(\[]\s*([^()\[\]]*?)\s*[)\]]/g,function(m,c){
@@ -278,14 +279,14 @@ function formatLine(raw,short,forceBL){
       sawShort=true;
       var z=val?asSize(val):'';
       if(z){if(!shortSize)shortSize=z;return pre+' '}
-      if(val&&/^\d{1,2}$/.test(val)){if(!shortSize)shortSize='A'+val;return pre+' '}
+      if(val&&/^\d{1,2}$/.test(val)){if(!shortSize)shortSize=Number(val)+'A';return pre+' '}
       return pre+' '+(val||'')+' ';
     });
   }
   line=line.replace(SIZE_LAB,function(m,pre,val){
     var z=val?asSize(val):'';
     if(z){if(!size)size=z;return pre+' ';}
-    if(val&&/^\d{1,2}$/.test(val)){if(!size)size='A'+val;return pre+' ';}
+    if(val&&/^\d{1,2}$/.test(val)){if(!size)size=Number(val)+'A';return pre+' ';}
     return pre+' '+(val||'')+' ';
   });
   line=line.replace(NUM_LAB,function(m,pre,d){if(d&&!num)num=d;return pre+' ';});
@@ -315,7 +316,8 @@ function formatLine(raw,short,forceBL){
   }
   var n=name.join(' ').replace(/[()\[\]]/g,' ').replace(/(\p{L}{2,})\.(?=\s|$)/gu,'$1').replace(/^\(+([^()]*)\)+$/,'$1').replace(EDGE,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   size=size.toLocaleUpperCase('pt-BR');
-  shortSize=shortSize.toLocaleUpperCase('pt-BR');
+  shortSize=kid(shortSize.toLocaleUpperCase('pt-BR'));
+  size=kid(size);
   if(mode===2){
     if(!size&&shortSize&&(sawCamisa||sawConj))size=shortSize;
     if(size&&!shortSize&&(sawShort||sawConj||!sawCamisa))shortSize=size;
