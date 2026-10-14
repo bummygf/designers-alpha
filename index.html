@@ -253,8 +253,12 @@ function formatLine(raw,short,forceBL,forceShirt){
     .replace(/(^|[^\p{L}])'+|'+(?![\p{L}])/gu,'$1 ');
   line=line.replace(/^[\s•·▪►>\-–—]+/,'').replace(/^\d{1,3}\s*[.)]\s+/,'');
   line=line.replace(/(\p{L})-(\d)/gu,'$1 $2').replace(/(\d)-(\p{L})/gu,'$1 $2');
-  line=stripGender(line);
   var only=!!forceShirt,bl=!!forceBL,sawCamisa=false,sawConj=false,sawShort=false,shortSize='',glued=[];
+  // feminino = baby look (BL); masculino/unissex só é removido e desliga o BL de seção
+  var fem=false,masc=false;
+  line=line.replace(/\p{L}+\.?/gu,function(w){var g=genderOf(w);if(g==='F')fem=true;else if(g)masc=true;return g?' ':w});
+  if(masc&&!fem)bl=false;
+  if(fem)bl=true;
   line=line.replace(BLRE,function(m,pre){bl=true;return pre+' '});
   line=line.replace(ONLYRE,function(m,pre){only=true;return pre+' '});
   var hasShortW=/(^|[^\p{L}\p{N}])(SHORT|BERMUDA|CAL[ÇC][ÃA]O)/iu.test(line);
@@ -344,7 +348,7 @@ function headerKind(raw){
   t=t.replace(ONLYRE,function(m,p){h.shirt=true;return p+' '});
   t=t.replace(/\p{L}+/gu,function(w){
     var g=genderOf(w);
-    if(g){h.any=true;if(g!=='F')h.reset=true;return ' '}
+    if(g){h.any=true;if(g==='F')h.bl=true;else h.reset=true;return ' '}
     var u=noAcc(w).toUpperCase();
     if(/^CAMIS(A|AS|ETA|ETAS)$/.test(u)){h.shirt=true;return ' '}
     if(/^(SHORT|SHORTS|BERMUDA|CONJUNTO|CONJ|COMPLETO|KIT)$/.test(u)){h.conj=true;return ' '}
