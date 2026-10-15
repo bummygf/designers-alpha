@@ -211,6 +211,13 @@ function genderOf(w){
   return '';
 }
 function stripGender(s){return s.replace(/\p{L}+\.?/gu,function(w){return genderOf(w)?' ':w})}
+var ABBR=/^(DR|DRA|SR|SRA|JR|PROF|PROFA|ENG|ENGA|TEC|SGT|CEL|CAP|TEN|MAJ|ST|STA|DEP)\.$/;
+function cleanTok(t){
+  if(/^(?:\p{L}\.)+$/u.test(t))return t;
+  var lead=t.replace(/^[.,;:'~\-_\]\[\/\\!?]+/,'');
+  if(ABBR.test(noAcc(lead).toUpperCase()))return lead;
+  return t.replace(/^[.,;:'~\-_\]\[\/\\!?]+|[.,;:'~\-_\]\[\/\\!?]+$/g,'').replace(/^(\d{1,3})[º°]$/,'$1');
+}
 function kid(z){var m=String(z).match(/^(?:A(\d{1,2})|(\d{1,2})A)$/i);return m?Number(m[1]||m[2])+'A':z}
 var WORDS={PEQUENO:'P',MEDIO:'M',GRANDE:'G'};
 var SIZE_LAB=/(^|[^\p{L}\p{N}])(?:TAMANHO|TAM|TMH|TM|SIZE)\.?\s*[:=]?\s*(?:([\p{L}\p{N}]{1,8})(?![\p{L}\p{N}])(?!\s*[:=]))?/giu;
@@ -297,9 +304,19 @@ function formatLine(raw,short,forceBL,forceShirt){
     return pre+' '+(val||'')+' ';
   });
   line=line.replace(NUM_LAB,function(m,pre,d){if(d&&!num)num=d;return pre+' ';});
-  var toks=line.split(/[\s,;|\/:=]+/).map(function(t){
-    return t.replace(/^[.,;:'~\-_\]\[\/\\!?]+|[.,;:'~\-_\]\[\/\\!?]+$/g,'').replace(/^(\d{1,3})[º°]$/,'$1');
-  }).filter(Boolean);
+  var toks=line.split(/[\s,;|\/:=]+/).map(cleanTok).filter(Boolean);
+  // "M." / "G." / "P." / "S." / "L.": inicial de nome (M. SILVA) ou tamanho com ponto (10 G.)?
+  toks=toks.map(function(t,i){
+    if(!/^[GMPSL]\.$/i.test(t))return t;
+    var hasSize=!!(size||shortSize),wordAfter=false;
+    toks.forEach(function(o,k){
+      if(k===i)return;
+      var base=o.replace(/\.$/,'');
+      if(SIZE.test(base)&&!/^[GMPSL]\.$/i.test(o))hasSize=true;
+      if(k>i&&/^\p{L}{2,}/u.test(o)&&!SIZE.test(base))wordAfter=true;
+    });
+    return (hasSize||wordAfter)?t:t.slice(0,-1);
+  });
   if(sawShort||sawCamisa||sawConj)toks=toks.filter(function(t){return !/^(E|&|\+|COM)$/i.test(t)});
   var numI=-1,sizeI=-1,shortI=-1,i;
   if(!num){for(i=0;i<toks.length;i++){if(/^\d{1,3}$/.test(toks[i])){numI=i;break}}}
@@ -321,7 +338,7 @@ function formatLine(raw,short,forceBL,forceShirt){
       if(pm&&WORDS[noAcc(pm[1]).toUpperCase()]){size=WORDS[noAcc(pm[1]).toUpperCase()];name.splice(i,1);break}
     }
   }
-  var n=name.join(' ').replace(/[()\[\]]/g,' ').replace(/(\p{L}{2,})\.(?=\s|$)/gu,'$1').replace(/^\(+([^()]*)\)+$/,'$1').replace(EDGE,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
+  var n=name.join(' ').replace(/[()\[\]]/g,' ').replace(/(\p{L}{2,})\.(?=\s|$)/gu,function(m,w){return ABBR.test(noAcc(w).toUpperCase()+'.')?m:w}).replace(/^\(+([^()]*)\)+$/,'$1').replace(EDGE,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   size=size.toLocaleUpperCase('pt-BR');
   shortSize=kid(shortSize.toLocaleUpperCase('pt-BR'));
   size=kid(size);
