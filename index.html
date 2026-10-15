@@ -220,7 +220,7 @@ function cleanTok(t){
 }
 function kid(z){var m=String(z).match(/^(?:A(\d{1,2})|(\d{1,2})A)$/i);return m?Number(m[1]||m[2])+'A':z}
 var WORDS={PEQUENO:'P',MEDIO:'M',GRANDE:'G'};
-var SIZE_LAB=/(^|[^\p{L}\p{N}])(?:TAMANHO|TAM|TMH|TM|SIZE)\.?\s*[:=]?\s*(?:([\p{L}\p{N}]{1,8})(?![\p{L}\p{N}])(?!\s*[:=]))?/giu;
+var SIZE_LAB=/(^|[^\p{L}\p{N}])(?:TAMANHO|TAM|TMH|TM|SIZE)\.?\s*[:=\-–]?\s*(?:([\p{L}\p{N}]{1,8})(?![\p{L}\p{N}])(?!\s*[:=]))?/giu;
 var NUM_LAB=/(^|[^\p{L}\p{N}])(?:(?:NUMERO|NÚMERO|NUM|NRO|NR|N)\.?\s*[:=]|N[º°]\.?|NUM(?:ERO)?\.?|NÚMERO)\s*(\d{1,4})?(?![\p{L}\p{N}])/giu;
 var NOISE=/(^|[^\p{L}\p{N}])(NOME|CAMISAS?|CAMISETAS?|CONJUNTO|CONJ|COMPLETO)(\d{1,2})?\.?(?![\p{L}\p{N}])\s*[:=]?/giu;
 var CAMGLUE=/(^|[^\p{L}\p{N}])CAMISAS?(?=(?:\d{1,2}A|A\d{1,2}|XXXG|XXG|XGG|EXGG|EXG|XG|GGG|GG|G|M|P|PP)(?![\p{L}\p{N}]))/giu;
@@ -260,6 +260,9 @@ function formatLine(raw,short,forceBL,forceShirt){
     .replace(/(^|[^\p{L}])'+|'+(?![\p{L}])/gu,'$1 ');
   line=line.replace(/^[\s•·▪►>\-–—]+/,'').replace(/^\d{1,3}\s*[.)]\s+/,'');
   line=line.replace(/(\p{L})-(\d)/gu,'$1 $2').replace(/(\d)-(\p{L})/gu,'$1 $2');
+  var qty=1;
+  line=line.replace(/[(\[]\s*(\d{1,2})\s*(?:CAMISAS?|CAMISETAS?|PE[ÇC]AS?|UNIDADES?|UNID\.?|UND\.?|UN\.?|PCS|P[ÇC]S)\s*[)\]]/giu,function(m,q){qty=Math.max(qty,Number(q));return ' '});
+  line=line.replace(/(^|[^\p{L}\p{N}])(\d{1,3})\s*(?:UNIDADES?|UNID\.?|UND\.?|PCS|P[ÇC]S|PE[ÇC]AS?)(?![\p{L}\p{N}])/giu,function(m,p,q){qty=Math.max(qty,Number(q));return p+' '});
   var only=!!forceShirt,bl=!!forceBL,sawCamisa=false,sawConj=false,sawShort=false,shortSize='',glued=[];
   // feminino = baby look (BL); masculino/unissex só é removido e desliga o BL de seção
   var fem=false,masc=false;
@@ -338,6 +341,7 @@ function formatLine(raw,short,forceBL,forceShirt){
       if(pm&&WORDS[noAcc(pm[1]).toUpperCase()]){size=WORDS[noAcc(pm[1]).toUpperCase()];name.splice(i,1);break}
     }
   }
+  if(name.length>=8&&!num&&!size&&!shortSize)return null;
   var n=name.join(' ').replace(/[()\[\]]/g,' ').replace(/(\p{L}{2,})\.(?=\s|$)/gu,function(m,w){return ABBR.test(noAcc(w).toUpperCase()+'.')?m:w}).replace(/^\(+([^()]*)\)+$/,'$1').replace(EDGE,'').replace(/\s+/g,' ').toLocaleUpperCase('pt-BR');
   size=size.toLocaleUpperCase('pt-BR');
   shortSize=kid(shortSize.toLocaleUpperCase('pt-BR'));
@@ -356,7 +360,7 @@ function formatLine(raw,short,forceBL,forceShirt){
   if(mode===2)f.push(shortSize);
   var out='';
   f.forEach(function(v,k){if(k===0)out+=v;else out+=v?', '+v:','});
-  return{text:out,name:n,missing:!n||!num||!size||(mode===2&&!shortSize&&!onlyShirt)};
+  return{text:out,name:n,qty:Math.min(qty,50),missing:!n||!num||!size||(mode===2&&!shortSize&&!onlyShirt)};
 }
 function headerKind(raw){
   var t=clean(raw).replace(/[\p{Extended_Pictographic}\p{So}\p{Sc}]/gu,' ').replace(/[^\p{L}\p{N}\s\/]/gu,' ');
@@ -377,10 +381,48 @@ function headerKind(raw){
   if(h.conj&&h.shirt)h.shirt=false;
   return h;
 }
+var NAMELAB=/^\s*NOME(?:\s+(?:NA|DA|DO|NO|DE|DOS|DAS)\s+\p{L}+)?\s*[:=]\s*(.*)$/iu;
+var FIELDLAB=/^\s*(?:N[ÚU]MERO|NUM|NRO|NR|N[º°]|TAMANHO|TAM|TM|SHORT|BERMUDA|CAMISA|SIZE)\s*[.:=\-–]/iu;
+var SECHEAD=/^\s*(?:CAMISAS?|CAMISETAS?|CONJUNTOS?|COMPLETOS?|KITS?)\b[^:\n]*?(?:\d+\s*(?:UND|UNID\w*|UNIDADES|PCS|P[ÇC]S|PE[ÇC]AS)\b|:\s*$)/iu;
+function sectionHeader(raw){
+  if(!SECHEAD.test(raw))return null;
+  return /^\s*(?:CAMISAS?|CAMISETAS?)/i.test(raw)?'shirt':'conj';
+}
+function isColumnHeader(raw){
+  var w=noAcc(clean(raw)).toUpperCase().replace(/[^A-Z]+/g,' ').trim().split(' ').filter(Boolean);
+  if(w.length<2||w.length>4)return false;
+  var T=['NOME','NUMERO','TAMANHO','TAM','NUM'];
+  return w.every(function(x){return x.length>=3&&T.some(function(t){return lev(x,t)<=2})});
+}
+function mergeRecords(lines){
+  var out=[],cur=null,lastRec=null,i,j;
+  for(i=0;i<lines.length;i++){
+    var l=lines[i];
+    if(!l.trim())continue;
+    var m=l.match(NAMELAB);
+    if(m){
+      var nm=m[1].trim();
+      if(!nm){
+        j=i+1;while(j<lines.length&&!lines[j].trim())j++;
+        if(j<lines.length&&!NAMELAB.test(lines[j])&&!FIELDLAB.test(lines[j])&&!sectionHeader(lines[j])&&!isColumnHeader(lines[j])){nm=lines[j].trim();i=j}
+      }
+      cur={name:nm,rest:[]};lastRec=cur;out.push(cur);continue;
+    }
+    if(FIELDLAB.test(l)){
+      if(cur){cur.rest.push(l);continue}
+      if(lastRec&&!lastRec.rest.length){lastRec.rest.push(l);continue}
+    }
+    cur=null;out.push(l);
+  }
+  return out.map(function(o){return typeof o==='string'?o:(o.name+' '+o.rest.join(' ')).trim()});
+}
 function formatAll(text,short,opt){
   opt=opt||{};
   var rows=[],seen={},miss=0,secBL=false,secShirt=false;
-  clean(text).split('\n').forEach(function(l){
+  mergeRecords(clean(text).split('\n')).forEach(function(l){
+    if(isColumnHeader(l))return;
+    var sk=sectionHeader(l);
+    if(sk){secShirt=(sk==='shirt');return}
     var h=headerKind(l);
     if(h){
       if(h.bl)secBL=true;
@@ -392,7 +434,7 @@ function formatAll(text,short,opt){
     var r=formatLine(l,short,secBL,secShirt);
     if(!r)return;
     if(opt.dup){if(seen[r.text])return;seen[r.text]=1}
-    rows.push(r);
+    for(var k=0;k<(r.qty||1);k++){var c={};for(var p in r)c[p]=r[p];rows.push(c)}
   });
   if(opt.sort){
     rows=rows.map(function(r,i){r.i=i;return r}).sort(function(a,b){
